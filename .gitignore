@@ -9,9 +9,6 @@ coverage/
 .env
 .env.*.local
 
-# drizzle-kit local state
-drizzle/meta/
-
 # logs
 *.log
 npm-debug.log*
