@@ -15,6 +15,13 @@
       "when": 1785488566998,
       "tag": "0001_force-row-level-security",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785765693936,
+      "tag": "0002_medical_prodigy",
+      "breakpoints": true
     }
   ]
 }

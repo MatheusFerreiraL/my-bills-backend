@@ -1,25 +1,22 @@
 import { randomUUID } from 'crypto';
-import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
 import { withTenantContext } from '../src/infra/database/tenant-context';
 import { accounts } from '../src/modules/accounts/account.schema';
+import { setupTestDatabase, TestDatabase } from './support/setup-test-database';
 
 // Container pull + start is slow compared to the rest of the e2e suite.
 jest.setTimeout(120_000);
 
 describe('AD-3 row-level security (tenant isolation)', () => {
-  let container: StartedPostgreSqlContainer;
+  let db: TestDatabase;
   let pool: Pool;
 
   const userA = randomUUID();
   const userB = randomUUID();
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:16-alpine').start();
-    pool = new Pool({ connectionString: container.getConnectionUri() });
-    await migrate(drizzle(pool), { migrationsFolder: './drizzle' });
+    db = await setupTestDatabase();
+    pool = db.pool;
 
     await withTenantContext(pool, userA, (db) =>
       db.insert(accounts).values({ userId: userA, name: 'User A checking', initialBalanceMinor: 1000 }),
@@ -30,8 +27,7 @@ describe('AD-3 row-level security (tenant isolation)', () => {
   });
 
   afterAll(async () => {
-    await pool?.end();
-    await container?.stop();
+    await db?.teardown();
   });
 
   it('returns zero rows for a query with no tenant context applied, even though rows exist', async () => {
