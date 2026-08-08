@@ -53,7 +53,12 @@ here, in both repos, once it's made.
 
 ## Open Questions (resolve before touching the relevant module)
 
-1. **Account/category deletion semantics** when records are in use (block vs. reassign vs. cascade soft-delete).
+1. **Account/category deletion semantics** when records are in use (block vs. reassign vs. cascade
+   soft-delete). **Blocking (as of 2026-08-08):** `DELETE /categories/{id}` exists and is intentionally
+   stubbed to return `501 Not Implemented` — see `.claude/rules/api-contract.md` Categories section —
+   specifically *because* this question is unresolved. Do not implement real category deletion (nor account
+   deletion, once that endpoint exists) until this is answered; shipping a default behavior implicitly is
+   exactly what this open question exists to prevent.
 2. **Credit-card edge cases:** partial invoice payments, purchases on the closing day, refunds.
 3. **Custom budget periods** spanning partial months — exact period model and reconciliation with month-filtered
   screens.

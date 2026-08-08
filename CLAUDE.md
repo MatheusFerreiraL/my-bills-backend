@@ -10,15 +10,17 @@
 
 ## 🔄 PROJECT STATUS — backend (this repo only)
 
-**Last updated:** 2026-07-30
+**Last updated:** 2026-08-08
 **Phase:** Scaffolding
 **Current focus:** Backend stack chosen and project scaffolded (module folders, lint/test config, Postgres
-connection module). Next up: schema design for AD-3 tenant scoping + row-level security policies.
+connection module). First real endpoints shipped: Categories CRUD. Next up: schema design for the remaining
+entities (accounts, transactions, credit cards, budgets, import).
 
 | Module | Status | Notes |
 |---|---|---|
 | Backend stack & project scaffold | Done | TypeScript + NestJS + Drizzle ORM/drizzle-kit + Postgres (`pg`) + Jest + ESLint/Prettier. See Recent decisions log (2026-07-30). |
-| Domain model & schema | Not started | |
+| Domain model & schema | In progress | Categories schema extended with `icon`/`color`/`type` (see `category.schema.ts`); no other entity's schema exists yet. |
+| Categories CRUD (create/list/edit; delete stubbed) | Done | First real controller/service/DTO/guard in the repo — see `categories.controller.ts`, `categories.service.ts`. Delete returns `501` pending `architecture-decisions.md` Open Question 1. |
 | AD-1 Derived ledger | Not started | |
 | AD-2 Balance function + checkpoints | Not started | Pure derivation first, checkpoints deferred |
 | AD-3 Tenant scoping | Not started | Must be present before any table is created |
@@ -26,7 +28,7 @@ connection module). Next up: schema design for AD-3 tenant scoping + row-level s
 | Credit cards / invoices | Not started | |
 | Budgets computation | Not started | |
 | Import subsystem (CSV/PDF) | Not started | |
-| **API contract published for `mybills-frontend`** | Not started | See `.claude/rules/api-contract.md` — this is the one thing the other repo is blocked on |
+| **API contract published for `mybills-frontend`** | In progress | Categories CRUD documented in `api-contract.md` (create/list/edit live; delete stubbed pending Open Question 1); every other module still undocumented. |
 
 **Open decisions blocking progress:** _(see Open Questions in `.claude/rules/architecture-decisions.md`)_
 
@@ -39,6 +41,12 @@ connection module). Next up: schema design for AD-3 tenant scoping + row-level s
   multi-tenant SaaS under genuine concurrent load. Project scaffolded with module
   folders for accounts/ledger, transactions, credit-cards, budgets, categories, import, a Postgres connection
   module (`src/infra/database/`) including the AD-3 tenant-context seam, and no domain code yet.
+- 2026-08-08 — First real HTTP endpoints shipped: Categories CRUD (create, list, edit; delete intentionally
+  stubbed to 501 pending `architecture-decisions.md` Open Question 1). Establishes the first controller/service/
+  DTO/guard/decorator pattern in the repo, for future modules to copy: `x-user-id` request header (validated as
+  UUID) as the interim tenant-resolution mechanism via a global `UserIdGuard` + `@UserId()` param decorator,
+  `class-validator`/`class-transformer` + a global `ValidationPipe`, and `@nestjs/swagger` wired in `main.ts`
+  (`/api-docs`) per the Tier 3 plan in `api-contract.md`.
 
 > **Cross-repo status:** this table only covers the backend. There is no single place that tracks
 > backend+frontend+desktop+mobile progress together, because status now lives per-repo. If you want one, it'll

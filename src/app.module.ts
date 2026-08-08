@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { UserIdGuard } from './common/guards/user-id.guard';
 import { DatabaseModule } from './infra/database/database.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
@@ -19,5 +21,6 @@ import { ImportModule } from './modules/import/import.module';
     CategoriesModule,
     ImportModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: UserIdGuard }],
 })
 export class AppModule {}

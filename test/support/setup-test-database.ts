@@ -9,6 +9,13 @@ const APP_ROLE_PASSWORD = 'app_role';
 export interface TestDatabase {
   container: StartedPostgreSqlContainer;
   pool: Pool;
+  /**
+   * Creates an additional app_role-authenticated pool, independent of `pool`. Use this when
+   * handing a pool to code that manages its own lifecycle (e.g. Nest's DatabaseModule, which
+   * closes its injected PG_POOL in onModuleDestroy) — reusing `pool` there would double-close it
+   * once both that code and `teardown()` try to end the same instance.
+   */
+  createPool: () => Pool;
   teardown: () => Promise<void>;
 }
 
@@ -32,17 +39,21 @@ export async function setupTestDatabase(): Promise<TestDatabase> {
   await adminPool.query(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
   await adminPool.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`);
 
-  const pool = new Pool({
-    host: container.getHost(),
-    port: container.getPort(),
-    database: container.getDatabase(),
-    user: APP_ROLE,
-    password: APP_ROLE_PASSWORD,
-  });
+  const createPool = () =>
+    new Pool({
+      host: container.getHost(),
+      port: container.getPort(),
+      database: container.getDatabase(),
+      user: APP_ROLE,
+      password: APP_ROLE_PASSWORD,
+    });
+
+  const pool = createPool();
 
   return {
     container,
     pool,
+    createPool,
     teardown: async () => {
       await pool.end();
       await adminPool.end();

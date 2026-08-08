@@ -22,6 +22,13 @@
       "when": 1785765693936,
       "tag": "0002_medical_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1786201936713,
+      "tag": "0003_wild_warhawk",
+      "breakpoints": true
     }
   ]
 }
