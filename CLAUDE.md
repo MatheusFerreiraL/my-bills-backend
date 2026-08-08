@@ -24,11 +24,11 @@ entities (accounts, transactions, credit cards, budgets, import).
 | AD-1 Derived ledger | Not started | |
 | AD-2 Balance function + checkpoints | Not started | Pure derivation first, checkpoints deferred |
 | AD-3 Tenant scoping | Not started | Must be present before any table is created |
-| Transactions / installments / recurring | Not started | |
+| Transactions / installments / recurring | In progress | Create/edit/delete (soft-delete) + paid↔pending status toggle implemented (`transactions.controller.ts`/`.service.ts`); installments, recurrence-rule generation, and import-batch linkage still not started. |
 | Credit cards / invoices | Not started | |
 | Budgets computation | Not started | |
 | Import subsystem (CSV/PDF) | Not started | |
-| **API contract published for `mybills-frontend`** | In progress | Categories CRUD documented in `api-contract.md` (create/list/edit live; delete stubbed pending Open Question 1); every other module still undocumented. |
+| **API contract published for `mybills-frontend`** | In progress | Categories (create/list/edit; delete stubbed) and Transactions (create/edit/delete/status-toggle) documented in `api-contract.md`; every other module still undocumented. |
 
 **Open decisions blocking progress:** _(see Open Questions in `.claude/rules/architecture-decisions.md`)_
 
@@ -47,6 +47,14 @@ entities (accounts, transactions, credit cards, budgets, import).
   UUID) as the interim tenant-resolution mechanism via a global `UserIdGuard` + `@UserId()` param decorator,
   `class-validator`/`class-transformer` + a global `ValidationPipe`, and `@nestjs/swagger` wired in `main.ts`
   (`/api-docs`) per the Tier 3 plan in `api-contract.md`.
+- 2026-08-08 — Transactions CRUD + status toggle shipped (create/edit/delete/`PATCH .../status`). Delete is a
+  real soft-delete (`deletedAt`), not a 501 stub like Categories — transaction deletion semantics aren't an
+  open architecture question the way category/account deletion is (see `domain-model.md`'s soft-delete rule).
+  Every mutating response returns the account's Current and Projected Balance computed via the existing
+  `getAccountBalance` seam (AD-1/AD-2), through one shared private service helper so no endpoint special-cases
+  balance logic by status. Discovered and fixed along the way: Postgres foreign-key checks are not subject to
+  row-level security, so `accountId`/`categoryId`/`tagId` ownership is now checked explicitly against the
+  tenant-scoped `db` before any write, rather than relying on the FK constraints alone.
 
 > **Cross-repo status:** this table only covers the backend. There is no single place that tracks
 > backend+frontend+desktop+mobile progress together, because status now lives per-repo. If you want one, it'll

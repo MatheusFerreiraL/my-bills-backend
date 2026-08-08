@@ -7,11 +7,12 @@
 > the *entire* interface between them, and if it isn't written down somewhere both repos read, the frontend has
 > no reliable way to know what the backend actually exposes.
 
-## Current state: first real endpoints (Categories)
+## Current state: first real endpoints (Categories, Transactions)
 
-Categories CRUD (create, list, edit) is implemented — see the "Categories" section below for the actual
-contract. Every other module in the sketch further down this file is still just a sketch, not implemented —
-treat only the "Auth / Tenant Scoping" and "Categories" sections as real today.
+Categories CRUD (create, list, edit) and Transactions (create, edit, delete, status toggle) are implemented —
+see the "Categories" and "Transactions" sections below for the actual contract. Every other module in the
+sketch further down this file is still just a sketch, not implemented — treat only "Auth / Tenant Scoping",
+"Categories", and "Transactions" as real today.
 
 Until the rest is designed, treat `MyBills-Technical-Specification.md` §5 (the functional requirements and
 acceptance criteria per screen) as the **interim behavioral contract** for anything not documented concretely
@@ -65,6 +66,71 @@ Request body: any subset of `name`, `icon`, `color`, `type`.
   an open architecture question — see `architecture-decisions.md` Open Question 1. Do not build frontend UI that
   assumes any particular delete behavior yet; there is intentionally no way to delete a category today.
 
+## Transactions
+
+Every mutating endpoint below returns the same envelope shape:
+```json
+{
+  "transaction": { "id": "...", "userId": "...", "accountId": "...", "categoryId": "...", "type": "expense",
+                    "status": "pending", "date": "2026-08-08", "amountMinor": 4200, "currencyCode": "EUR",
+                    "description": "...", "isIgnored": false, "isFixed": false, "createdAt": "...",
+                    "updatedAt": "...", "deletedAt": null },
+  "account": { "id": "...", "currentBalanceMinor": 12000, "projectedBalanceMinor": 7800 }
+}
+```
+`currentBalanceMinor`/`projectedBalanceMinor` are always computed via the backend's `getAccountBalance` seam
+(AD-1/AD-2), evaluated as of "now", for the transaction's account **after** the mutation — never summed
+client-side, and never summed anywhere else in the backend either. `is_ignored` never excludes a transaction
+from these figures — it's a display filter only, not a soft-delete (see `domain-model.md`).
+
+Not yet supported by any of these endpoints (explicitly out of scope for now): `is_fixed` toggle, installment
+materialization, recurrence-rule generation, import-batch linkage. Sending these has no effect — they are not
+accepted by the request schema. There is also no `GET /transactions` list endpoint yet (see the sketch below).
+
+### `POST /transactions` — create
+Request body:
+```json
+{ "type": "expense", "status": "pending", "accountId": "...", "categoryId": "...", "date": "2026-08-08",
+  "amountMinor": 4200, "description": "Groceries", "isIgnored": false, "tagIds": ["..."] }
+```
+- `type`: `"income"` | `"expense"`. `status`: `"paid"` | `"pending"`.
+- `accountId` required; `categoryId` optional (uncategorized is valid); `date` is date-only (`YYYY-MM-DD`);
+  `amountMinor` is a positive integer (AD-4, no floats — the sign is implied by `type`, never encoded in the
+  amount); `description` optional; `isIgnored` optional (default `false`); `tagIds` optional array of existing
+  tag ids.
+- `201` with the envelope above.
+- `400`: validation failure, or `accountId`/`categoryId`/any `tagId` doesn't exist or belongs to another tenant
+  (surfaced as "Referenced account, category, or tag does not exist" — checked explicitly against the
+  requesting tenant, not left to the database foreign keys alone, since FK checks in Postgres are not subject
+  to row-level security and would otherwise silently allow referencing another tenant's row).
+
+### `PATCH /transactions/{id}` — partial update
+Request body: any subset of the `POST` fields, including `status` directly.
+- If `tagIds` is present in the body, it **fully replaces** the transaction's tag set (not a merge).
+- Moving `accountId` to a different account: the response's `account` block reflects the **new** account's
+  balances, not the old one's.
+- `200` with the envelope above. `404` if `id` doesn't exist / isn't the requesting tenant's (RLS-backed,
+  indistinguishable from "doesn't exist", same as Categories). `400` on validation or a cross-tenant/nonexistent
+  reference, as above.
+
+### `PATCH /transactions/{id}/status` — toggle paid ↔ pending
+No request body. Flips the transaction's current status (`paid`→`pending` or `pending`→`paid`).
+- `200` with the envelope above, reflecting the new status and updated balances.
+- `404` if not found / not owned by the tenant.
+- This is a convenience endpoint for the common "mark as paid/unpaid" action; `PATCH /transactions/{id}` with an
+  explicit `status` field achieves the same underlying change.
+
+### `DELETE /transactions/{id}` — soft-delete
+- **Returns `200` with the envelope above, not `204`.** This is intentional and differs from typical REST
+  practice: every mutating endpoint in this contract must report the account's post-mutation balance, and a
+  bodyless `204` has nowhere to put that. The response's `transaction.deletedAt` is set; the transaction no
+  longer counts toward any future balance calculation (excluded via `deletedAt IS NULL` inside
+  `getAccountBalance`), which is why the returned balances already reflect its removal.
+- This is a soft-delete: the row is retained (financial records are never hard-deleted — see
+  `domain-model.md`'s cross-cutting rules), so history isn't rewritten and existing tag associations don't hit
+  the `transaction_tags` restrict-delete foreign key.
+- `404` if not found / not owned by the tenant.
+
 ## What belongs here once endpoints exist
 
 For each endpoint: method + path, purpose, request shape, response shape (including which figures are
@@ -81,8 +147,8 @@ POST /accounts/{id}/adjust → creates a balance-adjustment transaction
 
 ## Transactions
 GET /transactions?month=&type=&category=&account=&q= → filtered list + header badges
-POST /transactions → create (supports is_fixed / installment / is_ignored flags)
-PATCH /transactions/{id}/status → toggle paid/pending
+(create/edit/delete/status-toggle are already real — see the "Transactions" section above; this list
+endpoint, and is_fixed/installment support on create, are the only pieces still just a sketch)
 
 ## Credit Cards
 GET /credit-cards/{id}/invoices/current → open invoice + available limit
@@ -144,3 +210,9 @@ route layer in the repo. `SwaggerModule.setup()` is now wired in `src/main.ts` (
 shapes going forward; this markdown file stays the human-readable summary and the place `mybills-frontend`
 checks without needing a running backend. Tier 2 (a CI drift-check between route code and this file) is not
 adopted yet — still Tier 1 (behavioral discipline) for keeping this file in sync.
+
+**Update (2026-08-08) — Transactions create/edit/delete/status-toggle shipped.** Every mutating Transactions
+endpoint returns `{ transaction, account: { id, currentBalanceMinor, projectedBalanceMinor } }`, with both
+balance figures always computed through the backend's `getAccountBalance` seam — see the "Transactions" section
+above. `DELETE` is a `200` with that body, not a `204`, specifically so it can carry the post-deletion balance.
+Still Tier 1 for keeping this file in sync with the route layer.
